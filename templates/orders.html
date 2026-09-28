@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<h1>历史点餐</h1><section class="history">{% for o in orders %}<article><img src="{{url_for('static',filename='uploads/'+o.image) if o.image else url_for('static',filename='placeholder.svg')}}" alt=""><div><b>{{o.name}}</b><p>{{o.created_at}}</p></div></article>{% else %}<p>还没有点餐记录。</p>{% endfor %}</section>{% endblock %}

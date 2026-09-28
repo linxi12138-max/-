@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.env
+instance/*.db*
+static/uploads/*
+!static/uploads/placeholder.svg
+!static/placeholder.svg
