@@ -73,7 +73,8 @@ def init_db():
 		history_columns = {row["name"] for row in db.execute("PRAGMA table_info(order_history)")}
 		if "created_at" not in history_columns:
 			db.execute("ALTER TABLE order_history ADD COLUMN created_at TEXT")
-			db.execute("UPDATE order_history SET created_at=CURRENT_TIMESTAMP WHERE created_at IS NULL")		for dish in STARTER_DISHES:
+		db.execute("UPDATE order_history SET created_at=CURRENT_TIMESTAMP WHERE created_at IS NULL OR created_at='' ")
+		for dish in STARTER_DISHES:
 			if not db.execute("SELECT 1 FROM dish WHERE name=?", (dish[0],)).fetchone():
 				db.execute("INSERT INTO dish(name,category,description,ingredients,instructions) VALUES(?,?,?,?,?)", dish)
 
