@@ -68,7 +68,12 @@ def init_db():
 		db.executescript("""CREATE TABLE IF NOT EXISTS dish(id INTEGER PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, description TEXT DEFAULT '', ingredients TEXT DEFAULT '', instructions TEXT DEFAULT '', image TEXT DEFAULT '', order_count INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 		CREATE TABLE IF NOT EXISTS rating(id INTEGER PRIMARY KEY, dish_id INTEGER NOT NULL REFERENCES dish(id) ON DELETE CASCADE, score INTEGER NOT NULL CHECK(score BETWEEN 1 AND 5), created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 		CREATE TABLE IF NOT EXISTS order_history(id INTEGER PRIMARY KEY, dish_id INTEGER NOT NULL REFERENCES dish(id) ON DELETE CASCADE, created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
-		for dish in STARTER_DISHES:
+		# Earlier installs may have an order_history table without a timestamp.
+		# Keep those records usable when the date-grouped history is introduced.
+		history_columns = {row["name"] for row in db.execute("PRAGMA table_info(order_history)")}
+		if "created_at" not in history_columns:
+			db.execute("ALTER TABLE order_history ADD COLUMN created_at TEXT")
+			db.execute("UPDATE order_history SET created_at=CURRENT_TIMESTAMP WHERE created_at IS NULL")		for dish in STARTER_DISHES:
 			if not db.execute("SELECT 1 FROM dish WHERE name=?", (dish[0],)).fetchone():
 				db.execute("INSERT INTO dish(name,category,description,ingredients,instructions) VALUES(?,?,?,?,?)", dish)
 
@@ -184,7 +189,7 @@ def cart_confirm():
 		for item in items:
 			dish_id, quantity = item["dish"]["id"], item["quantity"]
 			db.execute("UPDATE dish SET order_count=order_count+? WHERE id=?", (quantity, dish_id))
-			db.executemany("INSERT INTO order_history(dish_id) VALUES(?)", [(dish_id,)] * quantity)
+			db.executemany("INSERT INTO order_history(dish_id,created_at) VALUES(?,CURRENT_TIMESTAMP)", [(dish_id,)] * quantity)
 	session.pop("cart", None)
 	flash("点餐已确认，已加入今天的点餐记录！")
 	return redirect(url_for("index"))
