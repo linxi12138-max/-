@@ -211,7 +211,7 @@ def orders():
 	try:
 		with dbopen() as db:
 			rows = db.execute("""SELECT substr(datetime(h.created_at, '+8 hours'),1,10) AS order_date, d.name, d.image, COUNT(*) AS quantity, MAX(datetime(h.created_at, '+8 hours')) AS last_order_at FROM order_history h JOIN dish d ON d.id=h.dish_id GROUP BY order_date, d.id ORDER BY order_date DESC, last_order_at DESC""").fetchall()
-		except sqlite3.DatabaseError:
+	except sqlite3.DatabaseError:
 		with dbopen() as db:
 			rows = db.execute("""SELECT '历史记录' AS order_date, d.name, d.image, COUNT(*) AS quantity, NULL AS last_order_at FROM order_history h JOIN dish d ON d.id=h.dish_id GROUP BY d.id ORDER BY MAX(h.id) DESC""").fetchall()
 	order_days = []
