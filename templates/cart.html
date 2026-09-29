@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}购物车{% endblock %}
+{% block content %}
+<div class="title"><div><h1>我的购物车</h1><p>确认菜品和份数后，再提交本次点餐。</p></div><a class="button pale" href="{{url_for('index')}}">继续选菜</a></div>
+{% if items %}<form class="dish-form" method="post" action="{{url_for('cart_update')}}">{% for item in items %}<div><b>{{item.dish.name}}</b><p>{{item.dish.description}}</p><label>份数 <input type="number" name="quantity_{{item.dish.id}}" min="0" max="99" value="{{item.quantity}}"></label><button class="delete" type="submit" name="remove_id" value="{{item.dish.id}}">移除</button></div>{% endfor %}<button class="button pale" type="submit">更新购物车</button></form><form class="rating" method="post" action="{{url_for('cart_confirm')}}"><p>共 <strong>{{cart_count}}</strong> 份菜品。点击确认后会写入今天的点餐记录。</p><button class="button" type="submit">确认提交点餐</button></form>{% else %}<section class="empty"><p>购物车还是空的。</p><a class="button" href="{{url_for('index')}}">去选菜</a></section>{% endif %}
+{% endblock %}

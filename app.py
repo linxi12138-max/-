@@ -77,6 +77,32 @@ def listing(sort="new"):
 	with dbopen() as db:
 		return db.execute(f"SELECT d.*, COALESCE(ROUND(AVG(r.score),1),0) avg FROM dish d LEFT JOIN rating r ON r.dish_id=d.id GROUP BY d.id ORDER BY {order}").fetchall()
 
+def current_cart():
+	"""Return the validated cart stored in the signed browser session."""
+	cart = {}
+	for key, quantity in session.get("cart", {}).items():
+		try:
+			dish_id, amount = int(key), int(quantity)
+		except (TypeError, ValueError):
+			continue
+		if dish_id > 0 and 0 < amount <= 99:
+			cart[str(dish_id)] = amount
+	return cart
+
+def cart_items():
+	cart = current_cart()
+	if not cart:
+		return []
+	ids = [int(key) for key in cart]
+	placeholders = ",".join("?" for _ in ids)
+	with dbopen() as db:
+		rows = db.execute(f"SELECT * FROM dish WHERE id IN ({placeholders})", ids).fetchall()
+	by_id = {row["id"]: row for row in rows}
+	return [{"dish": by_id[dish_id], "quantity": cart[str(dish_id)]} for dish_id in ids if dish_id in by_id]
+
+@app.context_processor
+def inject_cart_count():
+	return {"cart_count": sum(current_cart().values())}
 def save(dish_id=None):
 	name, category = request.form.get("name", "").strip(), request.form.get("category", "")
 	if not name or category not in CATEGORIES:
@@ -115,15 +141,53 @@ def detail(id):
 	if not dish: return "菜品不存在", 404
 	return render_template("dish_detail.html", dish=dish)
 
+@app.get("/cart")
+def cart():
+	return render_template("cart.html", items=cart_items())
+
+@app.post("/cart/add/<int:id>")
 @app.post("/order/<int:id>")
-def order(id):
+def cart_add(id):
 	with dbopen() as db:
 		if not db.execute("SELECT id FROM dish WHERE id=?", (id,)).fetchone(): return "菜品不存在", 404
-		db.execute("UPDATE dish SET order_count=order_count+1 WHERE id=?", (id,))
-		db.execute("INSERT INTO order_history(dish_id) VALUES(?)", (id,))
-	flash("已加入点餐记录！")
-	return redirect(request.referrer or url_for("index"))
+	cart = current_cart()
+	key = str(id)
+	cart[key] = min(cart.get(key, 0) + 1, 99)
+	session["cart"] = cart
+	flash("已加入购物车，请确认后提交点餐。")
+	return redirect(url_for("cart"))
 
+@app.post("/cart/update")
+def cart_update():
+	cart = current_cart()
+	remove_id = request.form.get("remove_id", type=int)
+	if remove_id:
+		cart.pop(str(remove_id), None)
+	else:
+		for key, value in request.form.items():
+			if key.startswith("quantity_"):
+				try: dish_id, quantity = int(key.removeprefix("quantity_")), int(value)
+				except ValueError: continue
+				if quantity <= 0: cart.pop(str(dish_id), None)
+				elif quantity <= 99: cart[str(dish_id)] = quantity
+	session["cart"] = cart
+	flash("购物车已更新。")
+	return redirect(url_for("cart"))
+
+@app.post("/cart/confirm")
+def cart_confirm():
+	items = cart_items()
+	if not items:
+		flash("购物车还是空的，先选几道菜吧。")
+		return redirect(url_for("index"))
+	with dbopen() as db:
+		for item in items:
+			dish_id, quantity = item["dish"]["id"], item["quantity"]
+			db.execute("UPDATE dish SET order_count=order_count+? WHERE id=?", (quantity, dish_id))
+			db.executemany("INSERT INTO order_history(dish_id) VALUES(?)", [(dish_id,)] * quantity)
+	session.pop("cart", None)
+	flash("点餐已确认，已加入今天的点餐记录！")
+	return redirect(url_for("orders"))
 @app.post("/rate/<int:id>")
 def rate(id):
 	score = request.form.get("score", type=int)
@@ -138,9 +202,14 @@ def ranking(): return render_template("ranking.html", popular=listing("popular")
 
 @app.get("/orders")
 def orders():
-	with dbopen() as db: rows = db.execute("SELECT h.created_at,d.name,d.image FROM order_history h JOIN dish d ON d.id=h.dish_id ORDER BY h.id DESC").fetchall()
-	return render_template("orders.html", orders=rows)
-
+	with dbopen() as db:
+		rows = db.execute("""SELECT substr(h.created_at,1,10) AS order_date, d.name, d.image, COUNT(*) AS quantity, MAX(h.created_at) AS last_order_at FROM order_history h JOIN dish d ON d.id=h.dish_id GROUP BY order_date, d.id ORDER BY order_date DESC, last_order_at DESC""").fetchall()
+	order_days = []
+	for row in rows:
+		if not order_days or order_days[-1]["date"] != row["order_date"]:
+			order_days.append({"date": row["order_date"], "items": []})
+		order_days[-1]["items"].append(row)
+	return render_template("orders.html", order_days=order_days)
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
 	if session.get("admin_logged_in"):
