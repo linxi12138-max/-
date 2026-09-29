@@ -133,7 +133,7 @@ def index():
 	dishes = [d for d in listing(sort) if not category or d["category"] == category]
 	if query:
 		dishes = [d for d in dishes if query.lower() in d["name"].lower() or query.lower() in d["description"].lower()]
-	return render_template("index.html", dishes=dishes, categories=CATEGORIES, sort=sort, category=category, query=query)
+	return render_template("index.html", dishes=dishes, categories=CATEGORIES, sort=sort, category=category, query=query, cart_dishes=cart_items(), show_cart=request.args.get("cart") == "1")
 
 @app.get("/dish/<int:id>")
 def detail(id):
@@ -143,7 +143,7 @@ def detail(id):
 
 @app.get("/cart")
 def cart():
-	return render_template("cart.html", items=cart_items())
+	return redirect(url_for("index", cart=1))
 
 @app.post("/cart/add/<int:id>")
 @app.post("/order/<int:id>")
@@ -155,7 +155,7 @@ def cart_add(id):
 	cart[key] = min(cart.get(key, 0) + 1, 99)
 	session["cart"] = cart
 	flash("已加入购物车，请确认后提交点餐。")
-	return redirect(url_for("cart"))
+	return redirect(url_for("index", cart=1))
 
 @app.post("/cart/update")
 def cart_update():
@@ -172,7 +172,7 @@ def cart_update():
 				elif quantity <= 99: cart[str(dish_id)] = quantity
 	session["cart"] = cart
 	flash("购物车已更新。")
-	return redirect(url_for("cart"))
+	return redirect(url_for("index", cart=1))
 
 @app.post("/cart/confirm")
 def cart_confirm():
@@ -187,7 +187,7 @@ def cart_confirm():
 			db.executemany("INSERT INTO order_history(dish_id) VALUES(?)", [(dish_id,)] * quantity)
 	session.pop("cart", None)
 	flash("点餐已确认，已加入今天的点餐记录！")
-	return redirect(url_for("orders"))
+	return redirect(url_for("index"))
 @app.post("/rate/<int:id>")
 def rate(id):
 	score = request.form.get("score", type=int)
